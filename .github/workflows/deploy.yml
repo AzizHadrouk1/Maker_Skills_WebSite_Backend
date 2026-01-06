@@ -3,7 +3,7 @@ name: Deploy with PM2
 on:
   push:
     branches:
-      - prod
+      - main
 
 jobs:
   deploy:
