@@ -89,6 +89,7 @@ export class UpdateLaboratoryDto {
     example: 'https://example.com/updated-laboratory-image.jpg',
     required: false,
   })
+  @ValidateIf(({ imageUrl }) => imageUrl !== undefined && imageUrl !== '')
   @IsUrl()
   @IsOptional()
   imageUrl?: string;
