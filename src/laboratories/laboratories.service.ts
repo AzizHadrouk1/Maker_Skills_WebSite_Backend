@@ -19,6 +19,11 @@ import {
   CreateLaboratoryReservationDto,
   UpdateLaboratoryReservationDto,
 } from './dto/reservation.dto';
+import {
+  assignSlugOnCreate,
+  assignSlugOnUpdate,
+  buildSlugLookupQuery,
+} from '../common/utils/slug.util';
 
 @Injectable()
 export class LaboratoriesService {
@@ -36,9 +41,13 @@ export class LaboratoriesService {
   ): Promise<{ message: string; data: Laboratory }> {
     try {
       console.log('Creating laboratory with data:', createLaboratoryDto);
-      const createdLaboratory = new this.laboratoryModel({
-        ...createLaboratoryDto,
-      });
+      const laboratoryData = { ...createLaboratoryDto } as Record<string, unknown>;
+      await assignSlugOnCreate(
+        this.laboratoryModel,
+        createLaboratoryDto.title,
+        laboratoryData,
+      );
+      const createdLaboratory = new this.laboratoryModel(laboratoryData);
       const savedLaboratory = await createdLaboratory.save();
       console.log('Laboratory created successfully:', savedLaboratory._id);
       return {
@@ -99,19 +108,10 @@ export class LaboratoriesService {
     }
   }
 
-  async findOne(id: string): Promise<{ message: string; data: Laboratory }> {
-    if (!isValidObjectId(id)) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Invalid laboratory ID',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+  async findOne(idOrSlug: string): Promise<{ message: string; data: Laboratory }> {
     try {
       const laboratory = await this.laboratoryModel
-        .findById(id)
+        .findOne(buildSlugLookupQuery(idOrSlug))
         .populate('materials')
         .exec();
       if (!laboratory) {
@@ -155,15 +155,31 @@ export class LaboratoriesService {
       );
     }
     try {
-      const updatedLaboratory = await this.laboratoryModel
-        .findByIdAndUpdate(
-          id,
+      const existingLaboratory = await this.laboratoryModel.findById(id).exec();
+      if (!existingLaboratory) {
+        throw new HttpException(
           {
-            ...updateLaboratoryDto,
-            updatedAt: new Date(),
+            statusCode: HttpStatus.NOT_FOUND,
+            message: 'Laboratory not found',
           },
-          { new: true },
-        )
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const updateData = {
+        ...updateLaboratoryDto,
+        updatedAt: new Date(),
+      } as Record<string, unknown>;
+      await assignSlugOnUpdate(
+        this.laboratoryModel,
+        id,
+        existingLaboratory.toObject() as unknown as Record<string, unknown>,
+        updateData,
+        'title',
+      );
+
+      const updatedLaboratory = await this.laboratoryModel
+        .findByIdAndUpdate(id, updateData, { new: true })
         .populate('materials')
         .exec();
 
@@ -299,29 +315,10 @@ export class LaboratoriesService {
   }
 
   async findAllMaterials(
-    laboratoryId: string,
+    laboratoryIdOrSlug: string,
   ): Promise<{ message: string; data: Material[] }> {
-    if (!isValidObjectId(laboratoryId)) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Invalid laboratory ID',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // Verify laboratory exists
-    const laboratory = await this.laboratoryModel.findById(laboratoryId).exec();
-    if (!laboratory) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Laboratory not found',
-        },
-        HttpStatus.NOT_FOUND,
-      );
-    }
+    const laboratoryResult = await this.findOne(laboratoryIdOrSlug);
+    const laboratoryId = String(laboratoryResult.data._id);
 
     try {
       const materials = await this.materialModel
@@ -508,33 +505,14 @@ export class LaboratoriesService {
   // ========== RESERVATION CRUD ==========
 
   async createReservation(
-    laboratoryId: string,
+    laboratoryIdOrSlug: string,
     createReservationDto: CreateLaboratoryReservationDto,
   ): Promise<{ message: string; data: LaboratoryReservation }> {
-    if (!isValidObjectId(laboratoryId)) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Invalid laboratory ID',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // Verify laboratory exists
-    const laboratory = await this.laboratoryModel.findById(laboratoryId).exec();
-    if (!laboratory) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Laboratory not found',
-        },
-        HttpStatus.NOT_FOUND,
-      );
-    }
+    const laboratoryResult = await this.findOne(laboratoryIdOrSlug);
+    const laboratory = laboratoryResult.data;
+    const laboratoryId = String(laboratory._id);
 
     try {
-      // Calculate total cost
       let totalCost = 0;
 
       // Calculate hours between start and end time on the same day

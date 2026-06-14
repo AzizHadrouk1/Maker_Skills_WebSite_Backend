@@ -4,6 +4,11 @@ import { Model, isValidObjectId } from 'mongoose';
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { UpdateBlogDto } from './dto/update-blog.dto';
 import { Blog } from './entities/blog.entity';
+import {
+  assignSlugOnCreate,
+  assignSlugOnUpdate,
+  buildSlugLookupQuery,
+} from '../common/utils/slug.util';
 
 @Injectable()
 export class BlogsService {
@@ -13,7 +18,9 @@ export class BlogsService {
     createBlogDto: CreateBlogDto,
   ): Promise<{ message: string; data: Blog }> {
     try {
-      const createdBlog = new this.blogModel(createBlogDto);
+      const blogData = { ...createBlogDto } as Record<string, unknown>;
+      await assignSlugOnCreate(this.blogModel, createBlogDto.title, blogData);
+      const createdBlog = new this.blogModel(blogData);
       const savedBlog = await createdBlog.save();
       return {
         message: 'Blog created successfully',
@@ -48,18 +55,11 @@ export class BlogsService {
     }
   }
 
-  async findOne(id: string): Promise<{ message: string; data: Blog }> {
-    if (!isValidObjectId(id)) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Invalid blog ID',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+  async findOne(idOrSlug: string): Promise<{ message: string; data: Blog }> {
     try {
-      const blog = await this.blogModel.findById(id).exec();
+      const blog = await this.blogModel
+        .findOne(buildSlugLookupQuery(idOrSlug))
+        .exec();
       if (!blog) {
         throw new HttpException(
           {
@@ -74,6 +74,9 @@ export class BlogsService {
         data: blog,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -98,8 +101,28 @@ export class BlogsService {
       );
     }
     try {
+      const existingBlog = await this.blogModel.findById(id).exec();
+      if (!existingBlog) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.NOT_FOUND,
+            message: 'Blog not found',
+          },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const updateData = { ...updateBlogDto } as Record<string, unknown>;
+      await assignSlugOnUpdate(
+        this.blogModel,
+        id,
+        existingBlog.toObject() as unknown as Record<string, unknown>,
+        updateData,
+        'title',
+      );
+
       const updatedBlog = await this.blogModel
-        .findByIdAndUpdate(id, updateBlogDto, { new: true })
+        .findByIdAndUpdate(id, updateData, { new: true })
         .exec();
       if (!updatedBlog) {
         throw new HttpException(

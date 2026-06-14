@@ -8,6 +8,11 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
 import path from 'path';
 import os from 'os';
+import {
+  assignSlugOnCreate,
+  assignSlugOnUpdate,
+  buildSlugLookupQuery,
+} from '../common/utils/slug.util';
 @Injectable()
 export class ProductsService {
   constructor(
@@ -27,7 +32,9 @@ export class ProductsService {
         }
       }
 
-      const createdProduct = new this.productModel(createProductDto);
+      const productData = { ...createProductDto } as Record<string, unknown>;
+      await assignSlugOnCreate(this.productModel, createProductDto.name, productData);
+      const createdProduct = new this.productModel(productData);
       const savedProduct = await createdProduct.save();
       return {
         message: 'Product created successfully',
@@ -66,19 +73,10 @@ export class ProductsService {
     }
   }
 
-  async findOne(id: string): Promise<{ message: string; data: Product }> {
-    if (!isValidObjectId(id)) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Invalid product ID',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+  async findOne(idOrSlug: string): Promise<{ message: string; data: Product }> {
     try {
       const product = await this.productModel
-        .findById(id)
+        .findOne(buildSlugLookupQuery(idOrSlug))
         .populate('category')
         .populate('events')
         .exec();
@@ -96,6 +94,9 @@ export class ProductsService {
         data: product,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -141,6 +142,15 @@ export class ProductsService {
         );
       }
 
+      const updateData = { ...updateProductDto } as Record<string, unknown>;
+      await assignSlugOnUpdate(
+        this.productModel,
+        id,
+        currentProduct.toObject() as unknown as Record<string, unknown>,
+        updateData,
+        'name',
+      );
+
       // If there are new images and the product had old images, delete the old ones
       if (
         updateProductDto.images &&
@@ -173,7 +183,7 @@ export class ProductsService {
       }
 
       const updatedProduct = await this.productModel
-        .findByIdAndUpdate(id, updateProductDto, { new: true })
+        .findByIdAndUpdate(id, updateData, { new: true })
         .populate('category')
         .populate('events')
         .exec();

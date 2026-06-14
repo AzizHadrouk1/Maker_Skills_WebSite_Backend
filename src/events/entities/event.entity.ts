@@ -89,6 +89,19 @@ export class Event {
   @IsString()
   name: string;
 
+  @ApiProperty({ description: 'URL-friendly identifier auto-generated from name' })
+  @Prop({ unique: true, sparse: true, index: true })
+  @IsOptional()
+  @IsString()
+  slug?: string;
+
+  @ApiProperty({ type: [String], description: 'Previous slugs for redirects after rename' })
+  @Prop({ type: [String], default: [] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  previousSlugs?: string[];
+
   @ApiProperty()
   @Prop()
   @IsOptional()

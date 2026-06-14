@@ -3,6 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, isValidObjectId } from 'mongoose';
 import { CreateEventDto, UpdateEventDto } from './dto/event.dto';
 import { Event } from './entities/event.entity';
+import {
+  assignSlugOnCreate,
+  assignSlugOnUpdate,
+  buildSlugLookupQuery,
+} from '../common/utils/slug.util';
 
 @Injectable()
 export class EventsService {
@@ -13,7 +18,9 @@ export class EventsService {
   ): Promise<{ message: string; data: Event }> {
     try {
       console.log('createdEventdto', createEventDto);
-      const createdEvent = new this.eventModel(createEventDto);
+      const eventData = { ...createEventDto } as Record<string, unknown>;
+      await assignSlugOnCreate(this.eventModel, createEventDto.name, eventData);
+      const createdEvent = new this.eventModel(eventData);
       const savedEvent = await createdEvent.save();
       if (!savedEvent) {
         throw new HttpException(
@@ -62,19 +69,10 @@ export class EventsService {
     }
   }
 
-  async findOne(id: string): Promise<{ message: string; data: Event }> {
-    if (!isValidObjectId(id)) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Invalid event ID',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+  async findOne(idOrSlug: string): Promise<{ message: string; data: Event }> {
     try {
       const event = await this.eventModel
-        .findById(id)
+        .findOne(buildSlugLookupQuery(idOrSlug))
         .populate('participants')
         .populate('category')
         .populate('products')
@@ -93,6 +91,9 @@ export class EventsService {
         data: event,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new HttpException(
         {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -117,8 +118,28 @@ export class EventsService {
       );
     }
     try {
+      const existingEvent = await this.eventModel.findById(id).exec();
+      if (!existingEvent) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.NOT_FOUND,
+            message: 'Event not found',
+          },
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const updateData = { ...updateEventDto } as Record<string, unknown>;
+      await assignSlugOnUpdate(
+        this.eventModel,
+        id,
+        existingEvent.toObject() as unknown as Record<string, unknown>,
+        updateData,
+        'name',
+      );
+
       const updatedEvent = await this.eventModel
-        .findByIdAndUpdate(id, updateEventDto, { new: true })
+        .findByIdAndUpdate(id, updateData, { new: true })
         .populate('participants')
         .exec();
 

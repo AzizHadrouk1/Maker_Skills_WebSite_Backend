@@ -22,6 +22,7 @@ import { ShopModule } from './shop/shop.module';
 import { StaticModule } from './static/static.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { LaboratoriesModule } from './laboratories/laboratories.module';
+import { SitemapModule } from './sitemap/sitemap.module';
 
 // Fonction pour obtenir le chemin du dossier uploads
 function getUploadsPath(): string {
@@ -107,6 +108,7 @@ function getUploadsPath(): string {
     StaticModule,
     UploadsModule,
     LaboratoriesModule,
+    SitemapModule,
   ],
   controllers: [AppController],
   providers: [AppService],

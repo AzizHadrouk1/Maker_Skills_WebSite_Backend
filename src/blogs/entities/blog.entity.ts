@@ -6,6 +6,12 @@ export class Blog extends Document {
   @Prop({ required: true })
   title: string;
 
+  @Prop({ unique: true, sparse: true, index: true })
+  slug?: string;
+
+  @Prop({ type: [String], default: [] })
+  previousSlugs?: string[];
+
   @Prop({ required: true })
   cover: string;
 

@@ -13,6 +13,22 @@ export class Laboratory extends Document {
   title: string;
 
   @ApiProperty({
+    description: 'URL-friendly identifier auto-generated from title',
+    example: 'laboratoire-impression-3d',
+    required: false,
+  })
+  @Prop({ unique: true, sparse: true, index: true })
+  slug?: string;
+
+  @ApiProperty({
+    description: 'Previous slugs for redirects after rename',
+    type: [String],
+    required: false,
+  })
+  @Prop({ type: [String], default: [] })
+  previousSlugs?: string[];
+
+  @ApiProperty({
     description: 'Detailed laboratory description',
     example: 'Laboratoire équipé pour l\'impression 3D et la prototypage',
     required: false,

@@ -8,6 +8,12 @@ export class Product extends Document {
   @Prop({ required: true })
   name: string;
 
+  @Prop({ unique: true, sparse: true, index: true })
+  slug?: string;
+
+  @Prop({ type: [String], default: [] })
+  previousSlugs?: string[];
+
   @Prop()
   description?: string;
 
